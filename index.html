@@ -97,6 +97,18 @@ body{
 .tip-morning-tag{ background:#dbeafe; color:#1e3a5f; }
 .tip-evening-tag{ background:#fde8d8; color:#7c2d12; }
 
+/* ── PRINT BUTTON ── */
+.btn-print{
+  display:block; width:calc(100% - 24px);
+  margin:10px 12px 0;
+  padding:14px; border:none; border-radius:12px;
+  background:#1a3a5c; color:white;
+  font-family:'Sarabun',sans-serif; font-size:15px; font-weight:700;
+  cursor:pointer; text-align:center;
+  box-shadow:0 3px 10px rgba(26,58,92,.25);
+}
+.btn-print:active{ opacity:.85; }
+
 /* ── SECTION CARD ── */
 .card{
   background:white; border-radius:14px;
@@ -968,7 +980,8 @@ function renderResult() {
       <button class="btn-share btn-line"  onclick="shareResult()">📤 ส่งผลให้พยาบาล</button>
       <button class="btn-share btn-copy"  onclick="copyResult()">📋 คัดลอกข้อความ</button>
       <button class="btn-share btn-reset" onclick="resetAll()">🗑️ เริ่มใหม่</button>
-    </div>`;
+    </div>
+    <button class="btn-print" onclick="printPDF()">🖨️ พิมพ์ PDF ส่งแพทย์ / สแกนลงระบบ รพ.</button>`;
 }
 
 // ─── BUILD SHARE TEXT ───
@@ -1108,6 +1121,167 @@ function toggleTip() {
   const content = document.getElementById('tip-content');
   btn.classList.toggle('open');
   content.classList.toggle('show');
+}
+
+// ─── PRINT PDF ───
+function printPDF() {
+  const r = calcAll();
+  const name = data.patient.name || '(ไม่ระบุชื่อ)';
+  const hn   = data.patient.hn   || '-';
+  const today = new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
+  const sAll = statusOf(r.aS, r.aD);
+  const sM   = statusOf(r.mS, r.mD);
+  const sE   = statusOf(r.eS, r.eD);
+
+  function colorBadge(cls) {
+    if (cls==='good') return 'background:#d5f5e3;color:#1e6b3a;';
+    if (cls==='warn') return 'background:#fef9e7;color:#b7770d;';
+    if (cls==='bad')  return 'background:#fadbd8;color:#c0392b;';
+    return 'background:#eee;color:#555;';
+  }
+
+  let rows = '';
+  for (let d = 1; d <= DAYS; d++) {
+    const dd = data.days[d];
+    const dateStr = dd?.date ? dd.date : '-';
+    const slots = [
+      {k:'เช้า 1', v: dd?.m1},
+      {k:'เช้า 2', v: dd?.m2},
+      {k:'เย็น 1', v: dd?.e1},
+      {k:'เย็น 2', v: dd?.e2},
+    ];
+    const cells = slots.map(s => {
+      if (!s.v?.sbp) return `<td style="text-align:center;color:#aaa;font-size:11px;">—</td>`;
+      const st = statusOf(s.v.sbp, s.v.dbp);
+      const bg = st.cls==='good'?'#eaffef': st.cls==='warn'?'#fffbe6': st.cls==='bad'?'#fdecea':'#fff';
+      return `<td style="text-align:center;background:${bg};font-weight:700;font-size:13px;">${s.v.sbp}/${s.v.dbp}<br><span style="font-size:10px;font-weight:400;color:#888;">${s.v.pulse ? '♥ '+s.v.pulse : ''}</span></td>`;
+    }).join('');
+    const bg = d % 2 === 0 ? '#f8fafc' : '#fff';
+    rows += `<tr style="background:${bg};">
+      <td style="text-align:center;font-weight:600;color:#1a3a5c;">${d}</td>
+      <td style="text-align:center;font-size:12px;color:#555;">${dateStr}</td>
+      ${cells}
+    </tr>`;
+  }
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>ผลวัดความดันโลหิตที่บ้าน — ${name}</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Sarabun', sans-serif; font-size: 13px; color: #1a2e3b; background: white; }
+  .header { background: #1a3a5c; color: white; padding: 14px 18px; border-radius: 10px 10px 0 0; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 18px; font-weight: 700; }
+  .header p { font-size: 11px; opacity: 0.8; margin-top: 2px; }
+  .header .logo { font-size: 28px; }
+  .patient-box { border: 1.5px solid #d0dce8; border-top: none; padding: 12px 18px; display: flex; gap: 30px; background: #f0f5fb; }
+  .patient-box .field { display: flex; flex-direction: column; }
+  .patient-box .label { font-size: 10px; color: #6b7f91; margin-bottom: 2px; }
+  .patient-box .val { font-size: 15px; font-weight: 700; color: #1a3a5c; }
+  .section-title { background: #2574a9; color: white; padding: 6px 14px; font-size: 13px; font-weight: 700; margin-top: 14px; border-radius: 6px 6px 0 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #1a3a5c; color: white; padding: 7px 6px; font-size: 11.5px; text-align: center; }
+  td { border: 1px solid #d0dce8; padding: 7px 5px; font-size: 12px; }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .sum-box { border: 1.5px solid #d0dce8; border-radius: 10px; padding: 10px 12px; text-align: center; }
+  .sum-box .sum-label { font-size: 11px; color: #6b7f91; }
+  .sum-box .sum-num { font-size: 26px; font-weight: 700; color: #1a3a5c; margin: 3px 0; }
+  .sum-box .sum-unit { font-size: 10px; color: #aaa; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-top: 5px; }
+  .criteria { border: 1px solid #d0dce8; border-radius: 8px; padding: 10px 14px; margin-top: 14px; font-size: 11.5px; line-height: 1.9; }
+  .sign-area { margin-top: 20px; display: flex; justify-content: flex-end; gap: 40px; }
+  .sign-box { text-align: center; border-top: 1px solid #999; width: 160px; padding-top: 5px; font-size: 11px; color: #555; }
+  .footer { text-align: center; font-size: 10px; color: #aaa; margin-top: 16px; }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1>📋 ผลวัดความดันโลหิตที่บ้าน (HBPM)</h1>
+    <p>Home Blood Pressure Monitoring · โรงพยาบาลแปลงยาว จ.ฉะเชิงเทรา</p>
+  </div>
+  <div style="text-align:right;font-size:11px;">
+    <div style="font-size:11px;">วันที่พิมพ์</div>
+    <div style="font-weight:700;">${today}</div>
+  </div>
+</div>
+
+<div class="patient-box">
+  <div class="field"><span class="label">ชื่อ-สกุล</span><span class="val">👤 ${name}</span></div>
+  <div class="field"><span class="label">HN</span><span class="val">🏥 ${hn}</span></div>
+  <div class="field"><span class="label">จำนวนวันที่บันทึก</span><span class="val">📅 ${Object.keys(data.days).length} / ${DAYS} วัน</span></div>
+</div>
+
+<div class="section-title">📅 ข้อมูลการวัดความดันรายวัน</div>
+<table>
+  <thead>
+    <tr>
+      <th>วันที่</th>
+      <th>วันเดือนปี</th>
+      <th>🌅 เช้า ครั้งที่ 1<br><small>SBP/DBP (mmHg)</small></th>
+      <th>🌅 เช้า ครั้งที่ 2<br><small>SBP/DBP (mmHg)</small></th>
+      <th>🌙 เย็น ครั้งที่ 1<br><small>SBP/DBP (mmHg)</small></th>
+      <th>🌙 เย็น ครั้งที่ 2<br><small>SBP/DBP (mmHg)</small></th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+
+<div class="section-title" style="margin-top:14px;">📊 สรุปค่าเฉลี่ย</div>
+<div class="summary-grid">
+  <div class="sum-box">
+    <div class="sum-label">🌅 ค่าเฉลี่ยช่วงเช้า</div>
+    <div class="sum-num" style="color:#1a3a5c;">${r.mS ? r.mS+'/'+r.mD : '—'}</div>
+    <div class="sum-unit">mmHg · ${r.mN || 0} ค่า</div>
+    ${r.mS ? `<span class="badge" style="${colorBadge(sM.cls)}">${sM.icon} ${sM.text}</span>` : ''}
+  </div>
+  <div class="sum-box">
+    <div class="sum-label">🌙 ค่าเฉลี่ยช่วงเย็น</div>
+    <div class="sum-num" style="color:#1a3a5c;">${r.eS ? r.eS+'/'+r.eD : '—'}</div>
+    <div class="sum-unit">mmHg · ${r.eN || 0} ค่า</div>
+    ${r.eS ? `<span class="badge" style="${colorBadge(sE.cls)}">${sE.icon} ${sE.text}</span>` : ''}
+  </div>
+  <div class="sum-box" style="border-color:#2574a9;background:#f0f7ff;">
+    <div class="sum-label">📌 ค่าเฉลี่ยรวม (เช้า+เย็น)</div>
+    <div class="sum-num" style="color:#1a3a5c;">${r.aS ? r.aS+'/'+r.aD : '—'}</div>
+    <div class="sum-unit">mmHg · ${r.aN || 0} ค่า</div>
+    ${r.aS ? `<span class="badge" style="${colorBadge(sAll.cls)}">${sAll.icon} ${sAll.text}</span>` : ''}
+  </div>
+</div>
+
+<div class="criteria">
+  <strong>เกณฑ์การแปลผล HBPM (Home Blood Pressure Monitoring)</strong><br>
+  ✅ ปกติ — ควบคุมได้ดี &nbsp;&nbsp; &lt; 130/80 mmHg<br>
+  🔔 เฝ้าระวัง &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 130–139 / 80–89 mmHg<br>
+  ⚠️ สูงมาก — แจ้งพยาบาล &nbsp; ≥ 140/90 mmHg<br>
+  🚨 วิกฤต — ไป ER / โทร 1669 &nbsp; ≥ 180/110 mmHg<br>
+  <span style="color:#888;font-size:11px;">อ้างอิง: แนวทางการดูแลผู้ป่วยโรคความดันโลหิตสูง ESH/ESC Guidelines</span>
+</div>
+
+<div class="sign-area">
+  <div class="sign-box">ลายมือชื่อผู้ป่วย / ผู้รายงาน</div>
+  <div class="sign-box">ลายมือชื่อแพทย์ / พยาบาลผู้รับ</div>
+</div>
+
+<div class="footer">
+  พัฒนาโดย นิชนารถ ปานอ่ำ พยาบาลวิชาชีพชำนาญการ งานผู้ป่วยนอก โรงพยาบาลแปลงยาว จ.ฉะเชิงเทรา<br>
+  ส่งจากแอป HBPM รพ.แปลงยาว · พิมพ์เมื่อ ${today}
+</div>
+
+<script>
+  window.onload = function() { window.print(); }
+<\/script>
+</body>
+</html>`);
+  win.document.close();
 }
 
 // ─── START ───
